@@ -1,39 +1,44 @@
-# Fake News Detection Tool with Source Verification
+# TruthLens — Fake News Detector
 
-This project is a **Fake News Detection Tool** designed to identify potential misinformation in news articles. It analyzes news content by performing three main checks:
+A small full-stack fake-news screening tool with a responsive web UI and Flask API. It performs transparent, rule-based checks for source reputation, sensational/clickbait language, and a small set of known false-claim patterns.
 
-1. **Source Credibility**: It verifies whether the source of the news article is reliable by comparing the input URL with a list of trusted sources.
+> **Important:** This is a screening/triage tool, not an AI fact checker. A high score does not prove that an article is true, and an unknown source is not automatically false.
 
-2. **Source Reliability**:Source reliability is a critical factor in determining the trustworthiness of information. By assessing source reliability, we can make informed decisions about what information to believe and share.
+## Features
+- Responsive frontend dashboard
+- Flask JSON API
+- URL/domain normalization
+- Local source reputation list
+- Sensational and clickbait language detection
+- Known-claim pattern matching
+- Deterministic scoring (no random results)
+- Input validation and useful error responses
+- `/api/health` health check
 
-3. **Language Pattern Analysis**: The tool checks for common misleading words or phrases often associated with fake news, such as "exclusive", "shocking", or "unbelievable".
+## Run locally
 
+```bash
+python -m venv .venv
+# Linux/macOS
+source .venv/bin/activate
+# Windows PowerShell: .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python app.py
+```
 
-### **Features:**
-- Simple interface for entering news text and source URL.
-- Basic source verification using trusted news outlets like BBC, CNN, and Reuters.
-- Language pattern analysis to identify sensationalist or misleading language.
-- Provides a result indicating whether the news is likely to be true, false, or unverifiable.
+Open `http://127.0.0.1:5000`.
 
-### **How It Works:**
-- Input News Article's source URL.
-- The tool checks the source for credibility and analyzes the language for potential signs of misinformation.
-- The result will display whether the news is credible, potentially fake, or requires further verification.
+## API
+`POST /api/analyze`
 
-### **Technologies Used:**
-- HTML: Structure and form for user input.
-- CSS: Basic styling for the tool’s interface.
-- JavaScript: Logic for processing input, analyzing language patterns, and verifying source credibility.
+```json
+{"text":"Article text goes here...","source":"https://www.reuters.com/example"}
+```
 
-### **How to Use:**
-1. Clone the repository.
-2. Open `index.html` in your browser.
-3. Enter a news article text and a source URL in the provided fields.
-4. Click the "Check News" button to analyze the content.
+`GET /api/health` returns `{ "status": "ok" }`.
 
-### **Future Improvements:**
-- Integrating real-time source verification with external APIs.
-- Implementing advanced language processing with NLP techniques.
-- Adding a more extensive database of trusted news sources for better accuracy.
+## What was fixed
+The original page generated a random credibility score and performed all checks in browser-only JavaScript. It also searched for source names by substring, which could incorrectly treat arbitrary text as a trusted source. The new version uses deterministic scoring, proper hostname parsing, a backend API, validation, a clean UI, and an explicit uncertainty disclaimer.
 
-Feel free to contribute by submitting issues or pull requests
+## Future upgrades
+For real fact verification, add reputable fact-checking/news APIs and show citations for external claims. A machine-learning model can be added later with documented training data, calibration, false-positive rate, and explainability.
