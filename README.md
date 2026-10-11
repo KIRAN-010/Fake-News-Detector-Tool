@@ -42,3 +42,22 @@ The original page generated a random credibility score and performed all checks 
 
 ## Future upgrades
 For real fact verification, add reputable fact-checking/news APIs and show citations for external claims. A machine-learning model can be added later with documented training data, calibration, false-positive rate, and explainability.
+
+## Validation and tests
+
+The API requires a JSON object with a string `text` (20–20,000 characters) and an optional string `source` (HTTP(S) URL or domain, at most 2,048 characters). Malformed JSON, incorrect types, invalid source domains and oversized requests return JSON errors instead of server exceptions. Request bodies are limited to 128 KiB.
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+```
+
+GitHub Actions checks Python 3.10 and 3.12. Tests cover deterministic results, validation, source-domain spoofing, punctuation detection and contextual uncertainty. The old standalone HTML entry now directs users to the working Flask interface.
+
+Scores are heuristic points out of 100, not a probability that an article is true. Known-claim wording can appear in quotations or rebuttals; the tool explicitly asks for contextual review. It does not retrieve or verify facts from external sources.
+
+To run this app alongside the traffic detector, use a different port:
+
+```bash
+python -m flask --app app run --host 127.0.0.1 --port 5002
+```
