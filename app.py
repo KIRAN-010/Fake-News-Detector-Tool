@@ -4,8 +4,10 @@ import re
 from urllib.parse import urlparse
 
 from flask import Flask, jsonify, render_template, request
+from werkzeug.exceptions import RequestEntityTooLarge
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 128 * 1024
 
 TRUSTED_SOURCES = {
     "reuters.com": 95,
@@ -20,7 +22,7 @@ TRUSTED_SOURCES = {
 
 SENSATIONAL_PATTERNS = [
     r"\bshocking\b", r"\bunbelievable\b", r"\byou won't believe\b",
-    r"\bmind[- ]blowing\b", r"\bbreaking!!!+\b", r"\b100% proven\b",
+    r"\bmind[- ]blowing\b", r"\bbreaking!{3,}", r"\b100% proven\b",
     r"\bsecret the media won't tell you\b", r"\bmust share\b",
 ]
 
@@ -37,15 +39,24 @@ def normalize_domain(value: str) -> str | None:
     value = value.strip()
     if not value:
         return None
+    if '://' in value and not re.match(r'^https?://', value, re.I):
+        return None
     if not re.match(r"^https?://", value, re.I):
         value = "https://" + value
     try:
-        host = (urlparse(value).hostname or "").lower().rstrip(".")
-    except ValueError:
+        parsed = urlparse(value)
+        if parsed.username or parsed.password:
+            return None
+        _ = parsed.port
+        host = (parsed.hostname or '').encode('idna').decode('ascii').lower().rstrip('.')
+    except (ValueError, UnicodeError):
         return None
     if host.startswith("www."):
         host = host[4:]
-    return host or None
+    labels = host.split('.')
+    if len(labels) < 2 or any(not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?', label) for label in labels):
+        return None
+    return host if len(host) <= 253 else None
 
 
 def source_analysis(source: str | None) -> dict:
@@ -80,8 +91,8 @@ def analyze(text: str, source: str | None = None) -> dict:
 
     score = round(max(0, min(100, src["score"] - language_penalty - (25 if false_claims else 0))))
     if false_claims:
-        verdict = "Likely false claim detected"
-        confidence = "High"
+        verdict = "Known-claim wording detected — review context"
+        confidence = "Low"
     elif score >= 75:
         verdict = "Higher credibility — verify before sharing"
         confidence = "Moderate"
@@ -105,7 +116,7 @@ def analyze(text: str, source: str | None = None) -> dict:
         },
         "fact_check": {
             "known_false_claim_pattern": bool(false_claims),
-            "status": "Matched a built-in known-claim pattern" if false_claims else "No built-in known-claim pattern matched",
+            "status": "Known-claim wording found; quotation, negation and context require manual verification" if false_claims else "No built-in known-claim pattern matched",
         },
         "disclaimer": "This is a heuristic screening tool, not proof that an article is true or false. Check primary sources and independent fact-checkers before relying on a result.",
     }
@@ -123,14 +134,27 @@ def health():
 
 @app.post("/api/analyze")
 def api_analyze():
-    data = request.get_json(silent=True) or {}
-    text = str(data.get("text", "")).strip()
-    source = str(data.get("source", "")).strip()
+    if not request.is_json:
+        return jsonify(error='Send a JSON object with Content-Type: application/json.'), 415
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(error='Request body must be a valid JSON object.'), 400
+    if not isinstance(data.get('text'), str) or not isinstance(data.get('source', ''), str):
+        return jsonify(error='text and source must be strings.'), 400
+    text = data['text'].strip()
+    source = data.get('source', '').strip()
+    if len(source) > 2048 or (source and normalize_domain(source) is None):
+        return jsonify(error='Enter a valid HTTP(S) source URL or domain (up to 2,048 characters).'), 400
     if len(text) < 20:
         return jsonify({"error": "Enter at least 20 characters of article text."}), 400
     if len(text) > 20000:
         return jsonify({"error": "Article text is limited to 20,000 characters."}), 413
     return jsonify(analyze(text, source))
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def too_large(_):
+    return jsonify(error='Request body is limited to 128 KiB.'), 413
 
 
 if __name__ == "__main__":
